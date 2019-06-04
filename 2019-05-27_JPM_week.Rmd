@@ -1,0 +1,982 @@
+
+
+---
+title: "JP Morgan Healthcare Conference"
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+  pdf_document: default
+---
+
+# Introduction
+Motivation: Can I quantify the impact of the JP Morgan Healthcare Conference on healthcare stock value? Can I move beyond the truism that stocks change in response to the speeches, deals, and data presented at the meeting and describe the impact in detail? I've found some sources that attempt to quantify the impact of the meeting on stocks (see below). 
+
+## Previous work  
+Here is an example of a quantification of impact of JPM week on biotech stocks:  
+[https://www.cnbc.com/2017/01/04/betting-on-biotech-during-jpmorgans-big-health-care-conference-pays-off-history-shows.html]  
+Quotes:  
+  
+* "Biotech has historically outperformed the broader market during The J.P. Morgan Healthcare Conference"  
+* "In the past 16 years, the NYSE Arca Biotechnology index (BTK), which measures the performance of 30 biotechnology firms, has outperformed the S&P 500 index by nearly 3 percent during JPMorgan's conference"  
+  
+## Based on these previous insights I hypothesize that:  
+  
+1. Healthcare stock prices tend to fluctuate more during JPM week than any other week in the same year.   
+2. The biotech sector outperforms the S&P 500 during JPM week more often than is expected by chance.  
+
+# Data import  
+```{r, include=FALSE}
+suppressPackageStartupMessages(library(quantmod))        # Download stock prices
+suppressPackageStartupMessages(library(tidyverse))       # Data manipulation / visualization
+suppressPackageStartupMessages(library(BatchGetSymbols)) # Download many stock prices
+suppressPackageStartupMessages(library(quantmod))      # Download a small number of stock prices
+suppressPackageStartupMessages(library(lubridate))       # Dates
+
+```
+
+## Data required:  
+  
+* Daily stock prices (avg price and range) biotechs  
+* JPM week dates back to inception of meeting  
+* S&P 500 weekly performance
+  
+### Import a list of biotech/pharma/healthcare tickers from the NASDAQ and NYSE. 
+```{r, echo = FALSE}
+# hat tip: following two URLs copied from this Stack Overflow answer: https://stackoverflow.com/questions/25338608/download-all-stock-symbol-list-of-a-market
+
+# nasdaq_tickers <- read_csv("http://www.nasdaq.com/screening/companies-by-industry.aspx?exchange=NASDAQ&render=download")
+# nyse_tickers <- read_csv("http://www.nasdaq.com/screening/companies-by-industry.aspx?exchange=NYSE&render=download")
+
+ # healthcare_tickers <- rbind(nasdaq_tickers, nyse_tickers) %>%
+ # filter(Sector == "Health Care") %>%
+#  select(-c(LastSale, MarketCap, `ADR TSO`, `Summary Quote`, X10, IPOyear, Sector)) %>%
+#  distinct(Name, .keep_all = TRUE)
+
+# healthcare_tickers
+
+#write_csv(healthcare_tickers, path = "/Users/katiephd/Box Sync/Katie_Documents/JPM19_stock_analysis/healthcare_tickers.tsv", col_names = TRUE)
+healthcare_tickers <- read_csv(file = "/Users/katiephd/Box Sync/Katie_Documents/JPM19_stock_analysis/healthcare_tickers.tsv", col_names = TRUE)
+healthcare_tickers
+```
+
+
+### Import stock data for these biotechs
+```{r, echo = FALSE}
+jpm_start <- as.Date("1983-01-01")
+jpm_end   <- as.Date("2018-12-31")
+
+
+# invisible(capture.output(healthcare_daily_stocks <- BatchGetSymbols(tickers = healthcare_tickers$Symbol,
+#                                                                     first.date = jpm_start,
+#                                                                     last.date = jpm_end,
+#                                                                     freq.data = "daily",
+#                                                                     cache.folder = file.path(tempdir(), 'BGS_Cache')))) # cache in tempdir()
+# 
+# write_csv(healthcare_daily_stocks$df.tickers, path = paste("/Users/katiephd/Box Sync/Katie_Documents/JPM19_stock_analysis/", Sys.Date(), "_healthcare_stock_prices_1983-2018.csv", sep = ""))
+# 
+# healthcare_daily_stocks <- NULL
+# healthcare_daily_stocks$df.table <- read_csv(file = "/Users/katiephd/Box Sync/Katie_Documents/JPM19_stock_analysis/2019-05-27_healthcare_stock_prices_1983-2018.csv", col_names = TRUE, na = )
+
+```
+
+
+
+
+```{r, echo = FALSE}
+#jpm_start <- as.Date("1983-01-01")
+#jpm_end   <- as.Date("2017-12-31")
+
+#invisible(capture.output(healthcare_daily_stocks <- BatchGetSymbols(tickers = healthcare_tickers$Symbol, 
+#                                           thresh.bad.data = 0.01, 
+#                                           bench.ticker = "GSPC", 
+#                                           first.date = jpm_start,
+#                                           last.date = jpm_end, 
+#                                           freq.data = freq.data,
+#                                           cache.folder = file.path(tempdir(), 'BGS_Cache')))) # cache in tempdir()
+#
+# write_csv(healthcare_daily_stocks$df.tickers, path = paste("/Users/katiephd/Box Sync/Katie_Documents/JPM19_stock_analysis/", Sys.Date(), "_healthcare_stock_prices_1983-2017.csv", sep = ""))
+
+healthcare_daily_stocks <- NULL
+healthcare_daily_stocks$df.tickers <- read_csv(file = "/Users/katiephd/Box Sync/Katie_Documents/JPM19_stock_analysis/2019-01-09_healthcare_stock_prices_1983-2017.csv", col_names = TRUE, na = )
+
+```
+
+```{r, echo = FALSE}
+stock_subset <- healthcare_daily_stocks$df.tickers[1:50000, ]
+ggplot(stock_subset, aes(x = ref.date, y = price.close)) + 
+  geom_line() + 
+  facet_wrap(~ticker, scales = 'free_y') 
+```
+
+### Import S&P 500 value using  
+S&P Index ticker is SPY and began in January 29, 1993. 
+```{r, echo = FALSE}
+SP500_ticker <- "SPY"
+SP500_index_start <- as.Date("1993-01-29")
+# SP500_index_daily_stocks <- getSymbols(Symbols = 'SPY', src = "yahoo", env = NULL, from = SP500_index_start)
+
+
+#write.table(x = as.data.frame(SP500_index_daily_stocks), file = paste("/Users/katiephd/Box Sync/Katie_Documents/JPM19_stock_analysis/", Sys.Date(), "_SP500_index_stock_prices_1993-2019.csv", sep = ""),row.names = TRUE , col.names = TRUE)
+SP500_index_daily_stocks <- NULL
+
+SP500_index_daily_stocks <- read.csv(sep = "", file = "/Users/katiephd/Box Sync/Katie_Documents/JPM19_stock_analysis/2019-05-27_SP500_index_stock_prices_1993-2019.csv",  header = TRUE, na = NA, stringsAsFactors = FALSE)
+SP500_index_daily_stocks <- cbind(SP500_index_daily_stocks, row.names(SP500_index_daily_stocks), rep(SP500_ticker, nrow(SP500_index_daily_stocks)))
+SP500_index_daily_stocks <- as_tibble(SP500_index_daily_stocks)
+colnames(SP500_index_daily_stocks) <- c("price.open", "price.high", "price.low", "price.close", "volume", "adjusted", "ref.date", "ticker")
+SP500_index_daily_stocks$ref.date <- as_date(SP500_index_daily_stocks$ref.date )
+
+range(SP500_index_daily_stocks$ref.date)
+plot(SP500_index_daily_stocks$ref.date, SP500_index_daily_stocks$price.close, xlab = "Date", ylab = "Price", main = "S&P500 Index", pch = 19, cex = 0.1)
+```
+
+
+Also, it looks like I can download this as timeseries data ("ts")
+getSymbols('F',src='yahoo',return.class='ts') 
+
+### Import NYSE Biotech index
+NYSE Arca Biotechnology index (BTK), stated in January 2003. 
+```{r, echo = FALSE}
+BTK_index_ticker <- "BTK"
+BTK_index_start <- as.Date("2003-01-03")
+BTK_index_daily_stocks <- getSymbols(Symbols = BTK_index_ticker, src = "yahoo", env = NULL, from = BTK_index_start)
+#write.table(x = as.data.frame(BTK_index_daily_stocks), file = paste("/Users/katiephd/Box Sync/Katie_Documents/JPM19_stock_analysis/", Sys.Date(), "_BTK_index_stock_prices_2003-2019.csv", sep = ""),row.names = TRUE , col.names = TRUE)
+BTK_index_daily_stocks <- NULL
+
+BTK_index_daily_stocks <- read.csv(sep = "", file = "/Users/katiephd/Box Sync/Katie_Documents/JPM19_stock_analysis/2019-06-04_BTK_index_stock_prices_2003-2019.csv",  header = TRUE, na = NA, stringsAsFactors = FALSE)
+BTK_index_daily_stocks <- cbind(BTK_index_daily_stocks, row.names(BTK_index_daily_stocks), rep(BTK_index_ticker, nrow(BTK_index_daily_stocks)))
+BTK_index_daily_stocks <- as_tibble(BTK_index_daily_stocks)
+colnames(BTK_index_daily_stocks) <- c("price.open", "price.high", "price.low", "price.close", "volume", "adjusted", "ref.date", "ticker")
+BTK_index_daily_stocks$ref.date <- as_date(BTK_index_daily_stocks$ref.date )
+
+range(BTK_index_daily_stocks$ref.date)
+plot(BTK_index_daily_stocks$ref.date, BTK_index_daily_stocks$price.close, xlab = "Date", ylab = "Price", main = "NYSE Biotech Index", pch = 19, cex = 0.1)
+```
+
+
+
+### Import Biotech index value
+NASDAQ Biotechnology index: NBI, started in November 2003. 
+
+```{r, echo = FALSE}
+biotech_index_ticker <- "NBI"
+biotech_index_start <- as.Date("2003-11-28")
+# biotech_index_daily_stocks <- getSymbols(Symbols = biotech_index_ticker, src = "yahoo", env = NULL, from = biotech_index_start)
+
+#write.table(x = as.data.frame(biotech_index_daily_stocks), file = paste("/Users/katiephd/Box Sync/Katie_Documents/JPM19_stock_analysis/2019-05-27_biotech_index_stock_prices_2003-2019.csv", sep = ""),row.names = TRUE , col.names = TRUE)
+biotech_index_daily_stocks <- NULL
+
+biotech_index_daily_stocks <- read.csv(sep = "", file = "/Users/katiephd/Box Sync/Katie_Documents/JPM19_stock_analysis/2019-05-27_biotech_index_stock_prices_2003-2019.csv",  header = TRUE, na = NA, stringsAsFactors = FALSE)
+biotech_index_daily_stocks <- as_tibble(biotech_index_daily_stocks)
+#colnames(biotech_index_daily_stocks) <- c("price.open", "price.high", "price.low", "price.close", "volume", "adjusted", "ref.date", "ticker")
+biotech_index_daily_stocks$ref.date <- as_date(biotech_index_daily_stocks$ref.date )
+
+range(biotech_index_daily_stocks$ref.date)
+plot(biotech_index_daily_stocks$ref.date, biotech_index_daily_stocks$price.close, xlab = "Date", ylab = "Price", main = "NASDAQ Biotech Index", pch = 19, cex = 0.1)
+```
+
+
+### Import JPM week dates
+I couldn't find a website where is listed the JPM weeks over the history of the conference. Based on some searches of the previous names of the conference (Hambrecht & Quist Healthcare Conference, Chase H & Q, now JP Morgan) it seems like it's always early January:  
+  
+* First JPM week, Hambrecht & Quist Healthcare Conference, was January 10-12, 1983.  [https://wrhambrecht.com/wp-content/uploads/2015/02/LSFMagWinter-2015-page1.png]  
+* Genetech press release puts second JPM week on January 10, 1984.  
+* 2001: Puts it the week of Jan 12 [https://www.wired.com/2001/01/the-biotech-faves-for-2001/]  
+* 2018 was January 8 - 11 [https://www.jpmorgan.com/country/US/EN/jpmorgan/investbk/conferences/healthcare]   
+  
+So I picked likely start dates in each year and then filled in the dates for the rest of the week.   
+```{r, echo = FALSE}
+jpm_date_range <- seq(from = ymd("1983-01-01"), to = ymd("2018-12-31"), by = "1 day")
+jpm_start_dates <- jpm_date_range[wday(jpm_date_range,label = TRUE) == "Sun" & 5 <= day(jpm_date_range) & day(jpm_date_range) <= 11  & week(jpm_date_range) <= 2]
+temp_mat <- matrix(ymd("1983-01-01"), nrow = 2018 - 1983 + 1, ncol = 5)
+colnames(temp_mat) <- c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")
+jpm_week_dates_by_year <- as_tibble(temp_mat) 
+jpm_week_dates_by_year$Monday    <- jpm_start_dates
+jpm_week_dates_by_year$Tuesday   <- jpm_start_dates + days(1) 
+jpm_week_dates_by_year$Wednesday <- jpm_start_dates + days(2) 
+jpm_week_dates_by_year$Thursday  <- jpm_start_dates + days(3) 
+jpm_week_dates_by_year$Friday    <- jpm_start_dates + days(4) 
+
+jpm_all_dates <- c(jpm_week_dates_by_year$Monday, 
+                   jpm_week_dates_by_year$Tuesday,
+                   jpm_week_dates_by_year$Wednesday, 
+                   jpm_week_dates_by_year$Thursday,
+                   jpm_week_dates_by_year$Friday)
+jpm_week_dates_by_year
+jpm_all_dates
+```
+
+
+## Analysis
+Cleaning the data, some thoughts:  
+  
+* I removed stock prices that are unbelievable high. I found that "The most expensive publicly traded stock of all time is Warren Buffett's Berkshire Hathaway (BRK.A), which is trading at $305,500 per share, as of Oct. 23, 2018))" [https://www.investopedia.com/ask/answers/.../whats-most-expensive-stock-all-time.asp_] so I removed any prices that are higher than this value.  
+* I (above) removed companies duplicated between NYSE/NASDAQ. Were these duplications due to companies switching exhanges? Other issues? 
+* Other cleaning I could do: check that low prices are always < high prices, check for missing data, etc...   
+* A point on missing data: the BatchGetSymbols function does a lot to replace missing data with most recent prices. I could look into the impact of this default parameter on my analysis at a later time.  
+
+```{r, echo = FALSE}
+dim(healthcare_daily_stocks$df.tickers)
+
+healthcare_daily_stocks$df.tickers <- healthcare_daily_stocks$df.tickers %>%
+  filter(price.high < 305000)
+dim(healthcare_daily_stocks$df.tickers)
+```
+Looks like we got rid of some bad data. Plot some price.high by company over the dates.   
+```{r, echo = FALSE}
+high_price_subset <- healthcare_daily_stocks$df.tickers[1:50000, ]
+ggplot(high_price_subset, aes(x = ref.date, y = price.high)) + 
+  geom_line() + 
+  facet_wrap(~ticker, scales = 'free_y') 
+
+```
+Looks good. These plots show that BatchGetSymbols() was able to handle companies as the entered and exited the stock market (unlike getSymbols()). 
+
+```{r}
+ggplot(SP500_index_daily_stocks, aes(x = ref.date, y = price.close)) + 
+  geom_line() + 
+  facet_wrap(~ticker, scales = 'free_y') 
+
+ggplot(biotech_index_daily_stocks, aes(x = ref.date, y = price.close)) + 
+  geom_line() + 
+  facet_wrap(~ticker, scales = 'free_y') 
+
+ggplot(BTK_index_daily_stocks, aes(x = ref.date, y = price.close)) + 
+  geom_line() + 
+  facet_wrap(~ticker, scales = 'free_y') 
+```
+Given how spotty the data is prior to 2010, let's just use NBI 2010 and later: 
+
+```{r, echo = FALSE}
+dim(biotech_index_daily_stocks)
+biotech_index_daily_stocks <- biotech_index_daily_stocks %>% filter(ref.date >= as.Date("2010-01-01"))
+dim(biotech_index_daily_stocks)
+
+BTK_index_daily_stocks <- BTK_index_daily_stocks %>% filter(ref.date >= as.Date("2010-01-01"))
+
+```
+Dropped a bunch of useless rows. Woo.
+Plot again: 
+```{r, echo = FALSE}
+plot(biotech_index_daily_stocks$ref.date, biotech_index_daily_stocks$price.close, xlab = "Date", ylab = "Price", main = "NASDAQ Biotech Index", pch = 19, cex = 0.1)
+plot(BTK_index_daily_stocks$ref.date, BTK_index_daily_stocks$price.close, xlab = "Date", ylab = "Price", main = "NYSE Biotech Index", pch = 19, cex = 0.1)
+
+```
+```{r, echo = FALSE}
+plot(biotech_index_daily_stocks$ref.date, biotech_index_daily_stocks$price.close, xlab = "Date", ylab = "Price", main = "Biotech Index Stock Prices", pch = 19, cex = 0.1, ylim = c(0, 6000))
+points(BTK_index_daily_stocks$ref.date, BTK_index_daily_stocks$price.close, xlab = "Date", ylab = "Price", pch = 19, cex = 0.1, col = "purple")
+legend("topleft", legend = c("NASDAQ (NBI)", "NYSE (BTK)"), col = c("black", "purple"), pch = 19)
+
+
+pdf(file = "/Users/katiephd/Box Sync/Katie_Documents/JPM19_stock_analysis/2019-06-04_NASDAQ_and_NYSE_biotech_indices.pdf")
+plot(biotech_index_daily_stocks$ref.date, biotech_index_daily_stocks$price.close, xlab = "Date", ylab = "Price", main = "Biotech Index Stock Prices", pch = 19, cex = 0.1, ylim = c(0, 6000))
+points(BTK_index_daily_stocks$ref.date, BTK_index_daily_stocks$price.close, xlab = "Date", ylab = "Price", pch = 19, cex = 0.1, col = "purple")
+legend("topleft", legend = c("NASDAQ (NBI)", "NYSE (BTK)"), col = c("black", "purple"), pch = 19)
+dev.off()
+
+
+```
+
+
+### Calculate stock price fluctuations
+I'm using the word "fluctuations" here because I don't have the technical expertise in finance to use a word like "volatility" which has a couple of specific definitions in finance. By "fluctuations" I mean that I'll calculate the range in price for each stock each week of the year, then I'll compare that range to the range over JPM week. This output will be a relative price range.  
+
+Calculate max net change (range) in price per day.  
+```{r, echo = FALSE}
+healthcare_daily_stock_range <- healthcare_daily_stocks$df.tickers %>% 
+  filter(ref.date %in% jpm_all_dates) %>%
+  filter(price.high < 305000) %>%
+  mutate(year = year(ref.date)) %>%
+  mutate(price_range = price.high - price.low) %>%
+  select(-c(price.open, price.close, volume, price.adjusted, ret.closing.prices, ret.adjusted.prices)) #, price.high, price.low))
+  
+head(healthcare_daily_stock_range)
+summary(healthcare_daily_stock_range$price_range)
+
+biotech_index_daily_stock_range <- biotech_index_daily_stocks %>% 
+  filter(ref.date %in% jpm_all_dates) %>% 
+  filter(price.high < 30500) %>% 
+  mutate(year = year(ref.date)) %>% 
+  mutate(price_range = price.high - price.low) %>% 
+  select(-c(price.open, price.close, volume, adjusted))
+biotech_index_daily_stock_range
+summary(biotech_index_daily_stock_range$price_range)
+
+
+BTK_index_daily_stock_range <- BTK_index_daily_stocks %>% 
+  filter(ref.date %in% jpm_all_dates) %>% 
+  filter(price.high < 30500) %>% 
+  mutate(year = year(ref.date)) %>% 
+  mutate(price_range = price.high - price.low) %>% 
+  select(-c(price.open, price.close, volume, adjusted))
+BTK_index_daily_stock_range
+summary(BTK_index_daily_stock_range$price_range)
+
+
+
+
+
+SP500_index_daily_stock_range <- SP500_index_daily_stocks %>% 
+  filter(ref.date %in% jpm_all_dates) %>% 
+  filter(price.high < 30500) %>% 
+  mutate(year = year(ref.date)) %>% 
+  mutate(price_range = price.high - price.low) %>% 
+  select(-c(price.open, price.close, volume, adjusted))
+SP500_index_daily_stock_range
+summary(SP500_index_daily_stock_range$price_range)
+
+```
+Calculate max price and min price each JPM week (by year) and list as the price_range.     
+```{r, echo = FALSE}
+healthcare_jpm_week_stock_range <- healthcare_daily_stocks$df.tickers %>% 
+  filter(ref.date %in% jpm_all_dates) %>%
+  filter(price.high < 305000) %>%
+  mutate(year = year(ref.date)) %>%
+  group_by(ticker, year) %>% 
+  summarise(max_price = max(price.high),
+            min_price = min(price.low)) %>%
+  mutate(price_range = max_price - min_price)
+healthcare_jpm_week_stock_range
+
+biotech_index_jpm_week_stock_range <- biotech_index_daily_stocks %>% 
+  filter(ref.date %in% jpm_all_dates) %>%
+  filter(price.high < 305000) %>%
+  mutate(year = year(ref.date)) %>%
+  group_by(ticker, year) %>% 
+  summarise(max_price = max(price.high),
+            min_price = min(price.low)) %>%
+  mutate(price_range = max_price - min_price)
+biotech_index_jpm_week_stock_range
+
+BTK_index_jpm_week_stock_range <- BTK_index_daily_stocks %>% 
+  filter(ref.date %in% jpm_all_dates) %>%
+  filter(price.high < 305000) %>%
+  mutate(year = year(ref.date)) %>%
+  group_by(ticker, year) %>% 
+  summarise(max_price = max(price.high),
+            min_price = min(price.low)) %>%
+  mutate(price_range = max_price - min_price)
+BTK_index_jpm_week_stock_range
+
+SP500_index_jpm_week_stock_range <- SP500_index_daily_stocks %>% 
+  filter(ref.date %in% jpm_all_dates) %>%
+  filter(price.high < 305000) %>%
+  mutate(year = year(ref.date)) %>%
+  group_by(ticker, year) %>% 
+  summarise(max_price = max(price.high),
+            min_price = min(price.low)) %>%
+  mutate(price_range = max_price - min_price)
+SP500_index_jpm_week_stock_range
+```
+Calculate difference in the price range of all subsequent weeks in the year.  
+Note, for simplicity here I'm not calculating each week of the year as M-F trading days, I'm using weeks based on date only (not day of week). I'm collecting data for each week starting on January 21st (week >= 3), where weeks are 7 day periods until the end of the year.  
+```{r, echo = FALSE}
+healthcare_weekly_stock_range <- healthcare_daily_stocks$df.tickers %>% 
+  filter(price.high < 305000) %>%
+  mutate(year = year(ref.date), 
+         week = week(ref.date)) %>%
+  filter(week >= 3) %>%
+  group_by(ticker, year, week) %>% 
+  summarise(max_price = max(price.high),
+            min_price = min(price.low)) %>%
+  mutate(price_range = max_price - min_price)
+healthcare_weekly_stock_range
+
+biotech_index_weekly_stock_range <- biotech_index_daily_stocks %>% 
+  filter(price.high < 305000) %>%
+  mutate(year = year(ref.date), 
+         week = week(ref.date)) %>%
+  filter(week >= 3) %>%
+  group_by(ticker, year, week) %>% 
+  summarise(max_price = max(price.high),
+            min_price = min(price.low)) %>%
+  mutate(price_range = max_price - min_price)
+biotech_index_weekly_stock_range
+
+BTK_index_weekly_stock_range <- BTK_index_daily_stocks %>% 
+  filter(price.high < 305000) %>%
+  mutate(year = year(ref.date), 
+         week = week(ref.date)) %>%
+  filter(week >= 3) %>%
+  group_by(ticker, year, week) %>% 
+  summarise(max_price = max(price.high),
+            min_price = min(price.low)) %>%
+  mutate(price_range = max_price - min_price)
+BTK_index_weekly_stock_range
+
+SP500_index_weekly_stock_range <- SP500_index_daily_stocks %>% 
+  filter(price.high < 305000) %>%
+  mutate(year = year(ref.date), 
+         week = week(ref.date)) %>%
+  filter(week >= 3) %>%
+  group_by(ticker, year, week) %>% 
+  summarise(max_price = max(price.high),
+            min_price = min(price.low)) %>%
+  mutate(price_range = max_price - min_price)
+
+SP500_index_weekly_stock_range
+```
+Compare all other weeks to JPM week.  
+I'll start with just 2017 and ticker == ABBV to simplify things, then build back up to all tickers and years. ABBV is "AbbVie is an American publicly traded biopharmaceutical company founded in 2013. It originated as a spin-off of Abbott Laboratories." [https://en.wikipedia.org/wiki/AbbVie_Inc.] 
+```{r, echo = FALSE}
+abbv_2017_jpm_week_price_range <- healthcare_jpm_week_stock_range %>%
+  filter(year == 2017, ticker == "ABBV")
+
+abbv_2017_weekly_price_ranges <- healthcare_weekly_stock_range %>%
+  filter(year == 2017, ticker == "ABBV")
+
+relative_ranges <- abbv_2017_weekly_price_ranges$price_range / abbv_2017_jpm_week_price_range$price_range
+relative_ranges
+dated_relative_ranges <- cbind(abbv_2017_weekly_price_ranges$week, relative_ranges)
+
+plot(dated_relative_ranges, xlab = "Week", ylab = "Stock price fluctuation: Each week / JPM week", main = "ABBV stock price fluctuations 2017 \n Weekly fluctuations relative to JPMHC week") 
+abline(h = 1, col = "red", lty = 2)
+```
+From this one example, we can see that the JPM week price range difference was not always greater than any other week of the year, but it was in the top 20% of weeks (10 points above red line implies 10 weeks had a price range >1x JPM week price range).    
+Are there any years for ABBV for which the JPM week price range was the maximal range for the year?  
+```{r, echo = FALSE}
+abbv_jpm_week_price_ranges <- healthcare_jpm_week_stock_range %>%
+  filter(ticker == "ABBV")
+
+abbv_weekly_price_ranges <- healthcare_weekly_stock_range %>%
+  filter(ticker == "ABBV")
+
+years <- unique(abbv_weekly_price_ranges$year)
+jpm_week_range_greater_than_other_week <- matrix(NA, nrow = length(years), ncol = length(unique(abbv_weekly_price_ranges$week)))
+row.names(jpm_week_range_greater_than_other_week) <- years
+colnames(jpm_week_range_greater_than_other_week) <- unique(abbv_weekly_price_ranges$week)
+counter <- 1
+for (yr in years){
+  abbv_jpm_week_price_ranges_in_year <- abbv_jpm_week_price_ranges %>% filter(year == yr) 
+  abbv_weekly_price_ranges_in_year <- abbv_weekly_price_ranges %>% filter(year == yr)
+  jpm_week_range_greater_than_other_week[counter, 1:length(abbv_weekly_price_ranges_in_year$price_range)] <- abbv_weekly_price_ranges_in_year$price_range < abbv_jpm_week_price_ranges_in_year$price_range
+  counter <- counter + 1
+}
+jpm_week_range_greater_than_other_week
+jpm_week_range_greater_than_other_week_summary <- as.data.frame(rowSums(jpm_week_range_greater_than_other_week, na.rm = TRUE))
+jpm_week_range_greater_than_other_week_summary <- cbind(row.names(jpm_week_range_greater_than_other_week_summary), jpm_week_range_greater_than_other_week_summary)
+colnames(jpm_week_range_greater_than_other_week_summary) <- c("year", "# weeks with price range smaller than JPM week price range")
+ggplot(data = jpm_week_range_greater_than_other_week_summary) + 
+  geom_point(aes(y = `# weeks with price range smaller than JPM week price range`, x = year)) + 
+  theme_bw()
+
+```
+No, not quite. It was nearly the case in 2016.  
+
+Now, let's extend this type of analysis to more tickers and also include a better summary visualization. I'll create a table with years as rows, and then each ticker will be a column with the # weeks price range smaller than JPM week price range. We'll be able to overlay all of these different tickers on the graph and we'll look for trends.  
+
+```{r, echo = FALSE}
+years <- unique(healthcare_jpm_week_stock_range$year)
+tickers <- unique(healthcare_weekly_stock_range$ticker)
+
+jpm_week_range_greater_than_other_week <- matrix(NA, nrow = length(years), ncol = length(unique(healthcare_weekly_stock_range$week)))
+row.names(jpm_week_range_greater_than_other_week) <- years
+colnames(jpm_week_range_greater_than_other_week) <- unique(healthcare_weekly_stock_range$week)
+ticker_sums <- NULL
+
+for (tkr in tickers){
+  counter <- 1
+  ticker_jpm_week_price_ranges <- healthcare_jpm_week_stock_range %>% filter(ticker == tkr)
+  ticker_weekly_price_ranges   <- healthcare_weekly_stock_range %>% filter(ticker == tkr)
+  current_ticker_count <- jpm_week_range_greater_than_other_week
+  for (yr in years){
+    jpm_week_price_ranges_in_year <- ticker_jpm_week_price_ranges %>% filter(year == yr) 
+    weekly_price_ranges_in_year   <- ticker_weekly_price_ranges %>% filter(year == yr)
+    if (length(weekly_price_ranges_in_year$price_range) > 0 & length(jpm_week_price_ranges_in_year$price_range) > 0) {
+      current_ticker_count[counter, 1:length(weekly_price_ranges_in_year$price_range)] <- weekly_price_ranges_in_year$price_range < jpm_week_price_ranges_in_year$price_range
+    }
+    counter <- counter + 1
+  }
+  ticker_sums <- cbind(ticker_sums, rowSums(current_ticker_count, na.rm = TRUE))
+}
+row.names(ticker_sums) <- years
+ticker_sums <- cbind(years, ticker_sums)
+colnames(ticker_sums) <- c("years", tickers)
+tkr_sums <- as.data.frame(ticker_sums)
+tkr_sums$years <- factor(tkr_sums$years)
+```
+The data is in "Wide" form right now, which is not very tidy! I'll reshape into "Long" form for ease of compatibility with ggplot()
+```{r, echo = FALSE}
+reshaped_ticker_sums <- gather(tkr_sums, ticker, weeks, ABBV:ZYNE, factor_key = TRUE)
+```
+There are some zero values in this table that should really be NAs, so I'll correct that now.  
+```{r, echo = FALSE}
+# Change zero to NA if stock prices don't exist for that year
+
+check_stock_exists_each_year <- healthcare_weekly_stock_range %>% 
+  group_by(ticker, year) %>%
+  summarise(count = n()) %>% 
+  filter(count >= 50) %>%
+  mutate(stock_exists = "exists", years = year) %>%
+  select(-c(year))
+
+reshaped_ticker_sums$years <- as.double(as.character(reshaped_ticker_sums$years))
+reshaped_ticker_sums$ticker <- as.character(reshaped_ticker_sums$ticker)
+
+
+cleaned_ticker_sums <- full_join(reshaped_ticker_sums, check_stock_exists_each_year, by = c("ticker", "years"))  
+# Drop NA rows from data
+cleaned_ticker_sums$count[is.na(cleaned_ticker_sums$stock_exists)] <- NA
+cleaned_ticker_sums <- na.omit(cleaned_ticker_sums)
+```
+
+Plot the summary figure.  
+```{r, echo = FALSE}
+ggplot(data = cleaned_ticker_sums) + 
+  geom_point(aes(x = years, y = weeks, color = factor(ticker)), position = "jitter") + 
+  theme(legend.position="none", panel.background = element_rect(fill = "white",
+                                colour = "white",
+                                size = 0.5, linetype = "solid"),
+  panel.grid.major = element_line(size = 0.5, linetype = 'solid',
+                                colour = "light grey"), 
+  panel.grid.minor = element_line(size = 0.25, linetype = 'solid',
+                                colour = "white")) + 
+  labs(title = "Biotech stocks highly volatile during week of JPM Healthcare Conference", x = "Year", y = "Weeks in year stock price changes less than during JPMHC")
+```
+Yikes, that's ugly and hard to interpret. Let's try again.  
+
+```{r, echo = FALSE}
+ggplot(data = cleaned_ticker_sums) + 
+  geom_point(aes(x = years, y = weeks), position = "jitter") + 
+  theme(legend.position="none", panel.background = element_rect(fill = "white",
+                                colour = "white",
+                                size = 0.5, linetype = "solid"),
+  panel.grid.major = element_line(size = 0.5, linetype = 'solid',
+                                colour = "light grey"), 
+  panel.grid.minor = element_line(size = 0.25, linetype = 'solid',
+                                colour = "white")) + 
+  labs(title = "Biotech stocks highly volatile during week of JPM Healthcare Conference", x = "Year", y = "Weeks in year stock price changes less than during JPMHC")
+```
+
+
+```{r, echo = FALSE}
+ggplot(data = cleaned_ticker_sums) + 
+  geom_smooth(aes(x = years, y = weeks), na.rm = TRUE,method = "loess") + 
+  theme(legend.position="none", panel.background = element_rect(fill = "white",
+                                colour = "white",
+                                size = 0.5, linetype = "solid"),
+  panel.grid.major = element_line(size = 0.5, linetype = 'solid',
+                                colour = "light grey"), 
+  panel.grid.minor = element_line(size = 0.25, linetype = 'solid',
+                                colour = "white")) + 
+  geom_hline(yintercept=26, linetype="dashed", 
+                color = "red", size = 1) + 
+  labs(title = "Recent increase in biotech stock fluctuations during JPM Healthcare Conference", x = "Year", y = "Weeks in year stock price changes less than during JPMHC")
+```
+Let's change week per year to a percentage of weeks to ease interpretation.  
+```{r, echo = FALSE}
+cleaned_ticker_sums <- cleaned_ticker_sums %>%
+  mutate(percent_lower = 100 * weeks/count)
+```
+
+Plot percentages.  
+```{r, echo = FALSE}
+ggplot(data = cleaned_ticker_sums) + 
+  geom_smooth(aes(x = years, y = percent_lower), na.rm = TRUE,method = "loess") + 
+  theme(legend.position="none", panel.background = element_rect(fill = "white",
+                                colour = "white",
+                                size = 0.5, linetype = "solid"),
+  panel.grid.major = element_line(size = 0.5, linetype = 'solid',
+                                colour = "light grey"), 
+  panel.grid.minor = element_line(size = 0.25, linetype = 'solid',
+                                colour = "white")) + 
+  geom_hline(yintercept=50, linetype="dashed", 
+                color = "red", size = 1) + 
+  labs(title = "Recent increase in biotech stock fluctuations during JPM Healthcare Conference", x = "Year", y = "% weeks/year stock price fluctuates less than during JPMHC")
+
+pdf("/Users/katiephd/Box Sync/Katie_Documents/JPM19_stock_analysis/2019-06-04_stock_fluctuations_during_JPMHC.pdf")
+temp_plot <- ggplot(data = cleaned_ticker_sums) + 
+  geom_smooth(aes(x = years, y = percent_lower), na.rm = TRUE,method = "loess") + 
+  theme(legend.position="none", panel.background = element_rect(fill = "white",
+                                colour = "white",
+                                size = 0.5, linetype = "solid"),
+  panel.grid.major = element_line(size = 0.5, linetype = 'solid',
+                                colour = "light grey"), 
+  panel.grid.minor = element_line(size = 0.25, linetype = 'solid',
+                                colour = "white")) + 
+  geom_hline(yintercept=50, linetype="dashed", 
+                color = "red", size = 1) + 
+  labs(title = "Recent increase in biotech stock fluctuations during JPM Healthcare Conference", x = "Year", y = "% weeks/year stock price fluctuates less than during JPMHC")
+dev.off()
+```
+
+### Performance vs S&P 500
+Let's define performance as % increase from start to end of JPMHC week. 
+
+```{r, echo = FALSE}
+SP500_index_jpm_week_stock_percent_performance <- SP500_index_daily_stocks %>% 
+  filter(ref.date %in% jpm_all_dates) %>%
+  filter(price.high < 305000) %>%
+  mutate(year = year(ref.date), day = day(ref.date)) %>%
+  group_by(ticker, year) %>% 
+  filter(day == min(day) | day == max(day)) %>% 
+  mutate(week_start_value = price.open[day == min(day)], 
+         week_end_value = price.close[day == max(day)], 
+         week_percent_change = 100 * week_end_value / week_start_value) %>% 
+  filter(day == max(day)) %>% 
+  select(-price.low, -price.high, -volume, -adjusted, -day, -price.open)
+
+SP500_index_jpm_week_stock_percent_performance
+
+
+healthcare_jpm_week_stock_percent_performance <- healthcare_daily_stocks$df.tickers %>% 
+  filter(ref.date %in% jpm_all_dates) %>%
+  filter(price.high < 305000) %>%
+  mutate(year = year(ref.date), day = day(ref.date)) %>%
+  group_by(ticker, year) %>% 
+  filter(day == min(day) | day == max(day)) %>% 
+  mutate(week_start_value = price.open[day == min(day)], 
+         week_end_value = price.close[day == max(day)], 
+         week_percent_change = 100 * week_end_value / week_start_value) %>% 
+  filter(day == max(day)) %>% 
+  select(-price.low, -price.high, -price.adjusted, -day, -price.open, -ret.adjusted.prices, -ret.closing.prices)
+
+healthcare_jpm_week_stock_percent_performance
+
+healthcare_jpm_week_stock_percent_performance_average_over_all_companies <- healthcare_jpm_week_stock_percent_performance %>% 
+  select(ticker, year, week_percent_change, volume) %>% 
+  group_by(year) %>% 
+  summarize(avg_weekly = mean(week_percent_change))
+healthcare_jpm_week_stock_percent_performance_average_over_all_companies
+
+```
+```{r, echo = FALSE}
+SP500_index_NOT_jpm_week_stock_percent_performance <- SP500_index_daily_stocks %>% 
+  filter(price.high < 305000) %>%
+  mutate(year = year(ref.date), week = week(ref.date), day = day(ref.date)) %>%
+  filter(week >= 3) %>% 
+  group_by(ticker, week, year)  %>% 
+  filter(day == min(day) | day == max(day)) %>% 
+  mutate(week_start_value = price.open[day == min(day)], 
+          week_end_value = price.close[day == max(day)], 
+          week_percent_change = 100 * week_end_value / week_start_value) %>% 
+  filter(day == max(day)) %>% 
+  select(-price.low, -price.high, -volume, -adjusted, -day, -price.open)
+
+SP500_index_NOT_jpm_year_stock_percent_performance <- SP500_index_NOT_jpm_week_stock_percent_performance %>% 
+  group_by(year) %>%
+  mutate(avg_weekly = mean(week_percent_change)) %>% 
+  select(year, avg_weekly) %>% 
+  unique
+SP500_index_NOT_jpm_week_stock_percent_performance
+
+```
+
+
+```{r, echo = FALSE}
+plot(SP500_index_jpm_week_stock_percent_performance$year, SP500_index_jpm_week_stock_percent_performance$week_percent_change, xlab = "Date", ylab = "Percent change", main = "S&P500 Index Price Change during JPMHC Week", type = "l")
+abline(h = 100, col = "grey", lty = 2)
+```
+Change abline from no change to average weekly change that year. 
+
+```{r, echo = FALSE}
+plot(SP500_index_NOT_jpm_week_stock_percent_performance$ref.date, SP500_index_NOT_jpm_week_stock_percent_performance$week_percent_change)
+```
+
+```{r, echo = FALSE}
+plot(SP500_index_NOT_jpm_year_stock_percent_performance$year, SP500_index_NOT_jpm_year_stock_percent_performance$avg_weekly, col = "grey", type = "l")
+```
+```{r, echo = FALSE}
+plot(SP500_index_jpm_week_stock_percent_performance$year, SP500_index_jpm_week_stock_percent_performance$week_percent_change, xlab = "Date", ylab = "Percent change", main = "S&P500 Index Price Change during JPMHC Week compared to avg for rest of year", type = "l")
+lines(SP500_index_NOT_jpm_year_stock_percent_performance$year, SP500_index_NOT_jpm_year_stock_percent_performance$avg_weekly, col = "grey")
+
+```
+Grey line is the average price change from Price.open at the beginning of the week to price.close at the end of the week for all weeks in the year after JPM. 
+
+
+```{r, echo = FALSE}
+plot(healthcare_jpm_week_stock_percent_performance_average_over_all_companies$year, healthcare_jpm_week_stock_percent_performance_average_over_all_companies$avg_weekly)
+```
+
+```{r, echo = FALSE}
+plot(healthcare_jpm_week_stock_percent_performance_average_over_all_companies$year, healthcare_jpm_week_stock_percent_performance_average_over_all_companies$avg_weekly, xlab = "Date", ylab = "Percent change", main = "Change in Averaged Healthcare Company Price vs S&P500 Index Price during JPMHC Week", type = "l", xlim = c(1995, 2017))
+lines(SP500_index_jpm_week_stock_percent_performance$year, SP500_index_jpm_week_stock_percent_performance$week_percent_change, col = "grey")
+```
+```{r, echo = FALSE}
+plot(healthcare_jpm_week_stock_percent_performance_average_over_all_companies$year,  healthcare_jpm_week_stock_percent_performance_average_over_all_companies$avg_weekly, xlab = "Date", ylab = "Percent change", main = "Healthcare Company vs S&P500 Index:\nRelative Price at end of JPMHC Week", type = "l", xlim = c(1995, 2016))
+lines(SP500_index_jpm_week_stock_percent_performance$year, SP500_index_jpm_week_stock_percent_performance$week_percent_change, col = "grey")
+```
+
+
+
+### Hypothesis 2: 2. The biotech sector outperforms the S&P 500 during JPM week more often than is expected by chance.  
+#### S&P500 vs Biotech Index stock
+
+```{r, echo = FALSE}
+SP500_index_jpm_week_stock_percent_performance <- SP500_index_daily_stocks %>% 
+  filter(ref.date %in% jpm_all_dates) %>%
+  filter(price.high < 305000) %>%
+  mutate(year = year(ref.date), day = day(ref.date)) %>%
+  group_by(ticker, year) %>% 
+  filter(day == min(day) | day == max(day)) %>% 
+  mutate(week_start_value = price.open[day == min(day)], 
+         week_end_value = price.close[day == max(day)], 
+         week_percent_change = 100 * week_end_value / week_start_value) %>% 
+  filter(day == max(day)) %>% 
+  select(-price.low, -price.high, -volume, -adjusted, -day, -price.open)
+
+SP500_index_NOT_jpm_week_stock_percent_performance <- SP500_index_daily_stocks %>% 
+  filter(price.high < 305000) %>%
+  mutate(year = year(ref.date), week = week(ref.date), day = day(ref.date)) %>%
+  filter(week >= 3) %>% 
+  group_by(ticker, week, year)  %>% 
+  filter(day == min(day) | day == max(day)) %>% 
+  mutate(week_start_value = price.open[day == min(day)], 
+          week_end_value = price.close[day == max(day)], 
+          week_percent_change = 100 * week_end_value / week_start_value) %>% 
+  filter(day == max(day)) %>% 
+  select(-price.low, -price.high, -volume, -adjusted, -day, -price.open)
+
+biotech_index_jpm_week_stock_percent_performance <- biotech_index_daily_stocks %>% 
+  filter(ref.date %in% jpm_all_dates) %>%
+  filter(price.high < 305000) %>%
+  mutate(year = year(ref.date), day = day(ref.date)) %>%
+  group_by(ticker, year) %>% 
+  filter(day == min(day) | day == max(day)) %>% 
+  mutate(week_start_value = price.open[day == min(day)], 
+         week_end_value = price.close[day == max(day)], 
+         week_percent_change = 100 * week_end_value / week_start_value) %>% 
+  filter(day == max(day)) %>% 
+  select(-price.low, -price.high, -volume, -adjusted, -day, -price.open)
+
+biotech_index_NOT_jpm_week_stock_percent_performance <- biotech_index_daily_stocks %>% 
+  filter(price.high < 305000) %>%
+  mutate(year = year(ref.date), week = week(ref.date), day = day(ref.date)) %>%
+  filter(week >= 3) %>% 
+  group_by(ticker, week, year)  %>% 
+  filter(day == min(day) | day == max(day)) %>% 
+  mutate(week_start_value = price.open[day == min(day)], 
+          week_end_value = price.close[day == max(day)], 
+          week_percent_change = 100 * week_end_value / week_start_value) %>% 
+  filter(day == max(day)) %>% 
+  select(-price.low, -price.high, -volume, -adjusted, -day, -price.open)
+
+
+BTK_index_jpm_week_stock_percent_performance <- BTK_index_daily_stocks %>% 
+  filter(ref.date %in% jpm_all_dates) %>%
+  filter(price.high < 305000) %>%
+  mutate(year = year(ref.date), day = day(ref.date)) %>%
+  group_by(ticker, year) %>% 
+  filter(day == min(day) | day == max(day)) %>% 
+  mutate(week_start_value = price.open[day == min(day)], 
+         week_end_value = price.close[day == max(day)], 
+         week_percent_change = 100 * week_end_value / week_start_value) %>% 
+  filter(day == max(day)) %>% 
+  select(-price.low, -price.high, -volume, -adjusted, -day, -price.open)
+
+BTK_index_NOT_jpm_week_stock_percent_performance <- BTK_index_daily_stocks %>% 
+  filter(price.high < 305000) %>%
+  mutate(year = year(ref.date), week = week(ref.date), day = day(ref.date)) %>%
+  filter(week >= 3) %>% 
+  group_by(ticker, week, year)  %>% 
+  filter(day == min(day) | day == max(day)) %>% 
+  mutate(week_start_value = price.open[day == min(day)], 
+          week_end_value = price.close[day == max(day)], 
+          week_percent_change = 100 * week_end_value / week_start_value) %>% 
+  filter(day == max(day)) %>% 
+  select(-price.low, -price.high, -volume, -adjusted, -day, -price.open)
+
+
+```
+
+Will need to limit analysis to 2010-2018 because those are the dates for which I have full years of both the biotech and s&P500 index information. 
+```{r, echo = FALSE}
+SP500_index_jpm_week_stock_percent_performance <- SP500_index_jpm_week_stock_percent_performance %>% filter(year >= 2010 & year < 2019)
+SP500_index_NOT_jpm_week_stock_percent_performance <- SP500_index_NOT_jpm_week_stock_percent_performance %>% filter(year >= 2010 & year < 2019)
+biotech_index_jpm_week_stock_percent_performance <- biotech_index_jpm_week_stock_percent_performance %>% filter(year >= 2010 & year < 2019)
+biotech_index_NOT_jpm_week_stock_percent_performance <- biotech_index_NOT_jpm_week_stock_percent_performance %>% filter(year >= 2010 & year < 2019)
+BTK_index_jpm_week_stock_percent_performance <- BTK_index_jpm_week_stock_percent_performance %>% filter(year >= 2010 & year < 2019)
+BTK_index_NOT_jpm_week_stock_percent_performance <- BTK_index_NOT_jpm_week_stock_percent_performance %>% filter(year >= 2010 & year < 2019)
+
+
+```
+Calculate an empirical pvalue for each year: 
+JPMHC week ratio >= other week ratios + 1 / # other weeks + 1 (JPM week)
+
+```{r, echo = FALSE}
+biotech_over_SP500_ratio_JPM_week <- biotech_index_jpm_week_stock_percent_performance$week_percent_change/ SP500_index_jpm_week_stock_percent_performance$week_percent_change
+biotech_over_SP500_ratio_JPM_week <- as_tibble(cbind(biotech_over_SP500_ratio_JPM_week, c(2010:2018)))
+colnames(biotech_over_SP500_ratio_JPM_week)[2] <- "year"
+
+BTK_over_SP500_ratio_JPM_week <- BTK_index_jpm_week_stock_percent_performance$week_percent_change/ SP500_index_jpm_week_stock_percent_performance$week_percent_change[c(1, 3:9)]
+BTK_over_SP500_ratio_JPM_week <- as_tibble(cbind(BTK_over_SP500_ratio_JPM_week, c(2010, 2012:2018)))
+colnames(BTK_over_SP500_ratio_JPM_week)[2] <- "year"
+
+
+
+nrow(biotech_index_NOT_jpm_week_stock_percent_performance) == nrow(SP500_index_NOT_jpm_week_stock_percent_performance)
+nrow(BTK_index_NOT_jpm_week_stock_percent_performance) 
+nrow(SP500_index_NOT_jpm_week_stock_percent_performance)
+
+
+biotech_index_NOT_jpm_week_stock_percent_performance$ref.date[!biotech_index_NOT_jpm_week_stock_percent_performance$ref.date %in% SP500_index_NOT_jpm_week_stock_percent_performance$ref.date]
+
+SP500_index_NOT_jpm_week_stock_percent_performance$ref.date[!SP500_index_NOT_jpm_week_stock_percent_performance$ref.date %in% biotech_index_NOT_jpm_week_stock_percent_performance$ref.date]
+
+sum(biotech_index_NOT_jpm_week_stock_percent_performance$ref.date != SP500_index_NOT_jpm_week_stock_percent_performance$ref.date) # Mismatch is actually okay
+
+
+biotech_over_SP500_ratio_NOT_JPM_week <- biotech_index_NOT_jpm_week_stock_percent_performance$week_percent_change/ SP500_index_NOT_jpm_week_stock_percent_performance$week_percent_change
+
+
+BTK_index_NOT_jpm_week_stock_percent_performance <- BTK_index_NOT_jpm_week_stock_percent_performance  %>% filter(year != 2011) %>% mutate(mon_week = str_c(week(ref.date), "-", year(ref.date)))
+temp_SP500 <- SP500_index_NOT_jpm_week_stock_percent_performance %>% mutate(mon_week = str_c(week(ref.date), "-", year(ref.date)))  %>% filter(mon_week %in% BTK_index_NOT_jpm_week_stock_percent_performance$mon_week)
+
+BTK_over_SP500_ratio_NOT_JPM_week <- BTK_index_NOT_jpm_week_stock_percent_performance$week_percent_change/ temp_SP500$week_percent_change
+
+
+
+ratio_df <- cbind(biotech_index_NOT_jpm_week_stock_percent_performance$year, biotech_index_NOT_jpm_week_stock_percent_performance$week, biotech_over_SP500_ratio_NOT_JPM_week)
+colnames(ratio_df) <- c("year", "week", "biotech_over_SP500_ratio")
+ratio_df <- as_tibble(ratio_df)
+
+
+BTK_ratio_df <- cbind(BTK_index_NOT_jpm_week_stock_percent_performance$year, BTK_index_NOT_jpm_week_stock_percent_performance$week, BTK_over_SP500_ratio_NOT_JPM_week)
+colnames(BTK_ratio_df) <- c("year", "week", "BTK_over_SP500_ratio")
+BTK_ratio_df <- as_tibble(BTK_ratio_df)
+```
+
+```{r, echo = FALSE}
+plot(biotech_index_jpm_week_stock_percent_performance$year, biotech_index_jpm_week_stock_percent_performance$week_percent_change, type = "l", col = "red", ylim = c(97, 104), ylab = "Week close / Week open", xlab = "Date", main = "NASDAQ Biotech Red, SP500 Gray")
+lines(SP500_index_jpm_week_stock_percent_performance$year, SP500_index_jpm_week_stock_percent_performance$week_percent_change, col = "grey")
+
+plot(BTK_index_jpm_week_stock_percent_performance$year, BTK_index_jpm_week_stock_percent_performance$week_percent_change, type = "l", col = "purple", ylim = c(97, 104), ylab = "Week close / Week open", xlab = "Date", main = "NYSE Biotech Purple, SP500 Gray")
+
+temp_years <- c(2010, 2012:2018)
+temp_results <- SP500_index_jpm_week_stock_percent_performance %>% filter(year != 2011) %>% select(week_percent_change, year, ticker)
+
+lines(temp_years, temp_results$week_percent_change , col = "grey")
+
+ BTK_index_jpm_week_stock_percent_performance$week_percent_change - temp_results$week_percent_change
+```
+
+```{r, echo = FALSE}
+pvals <- rep(NA, 2018-2010 + 1)
+counter <- 1
+
+for (yr in 2010:2018){
+  jpm_week_value <- biotech_over_SP500_ratio_JPM_week %>% filter(year == yr) %>% select(biotech_over_SP500_ratio_JPM_week) %>% unlist %>% unname
+  other_week_values <- ratio_df %>% filter(year == yr) %>% select(biotech_over_SP500_ratio) %>% unname %>% unlist
+  
+  print((sum(jpm_week_value <= other_week_values) + 1))
+  pvals[counter] <- ((sum(jpm_week_value <= other_week_values) + 1) / (length(other_week_values) + 1))
+  counter <- counter + 1
+  hist(other_week_values, main = yr)
+  abline(v = jpm_week_value, col = "red")
+   
+}
+hist(pvals, breaks = 100, main = "NASDAQ Biotech P-values JPMHC vs rest of year")
+abline(v = 0.05, col = "red")
+
+
+plot(2010:2018, pvals, ylim = c(0, 1), ylab = "P-value", xlab = "Date", pch = 19, main = "Biotech index and S&P500 index stocks perform comparably\nduring JPMHC week vs later weeks in the year")
+abline(h = 0.05, col = "red")
+pvals
+
+
+```
+
+
+```{r, echo = FALSE}
+BTK_pvals <- rep(NA, 6)
+counter <- 1
+for (yr in c(2010, 2012:2016, 2018)){
+  jpm_week_value <- BTK_over_SP500_ratio_JPM_week %>% filter(year == yr) %>% select(BTK_over_SP500_ratio_JPM_week) %>% unlist %>% unname
+  other_week_values <- BTK_ratio_df %>% filter(year == yr) %>% select(BTK_over_SP500_ratio) %>% unname %>% unlist
+  
+  print((sum(jpm_week_value <= other_week_values) + 1))
+  BTK_pvals[counter] <- ((sum(jpm_week_value <= other_week_values) + 1) / (length(other_week_values) + 1))
+  counter <- counter + 1
+  hist(other_week_values, main = yr)
+  abline(v = jpm_week_value, col = "red")
+   
+}
+hist(BTK_pvals, breaks = 20, main = "NYSE Biotech P-values JPMH vs rest of year")
+abline(v = 0.05, col = "red")
+
+
+plot(c(2010, 2012:2016, 2018), BTK_pvals, ylim = c(0, 1), ylab = "P-value", xlab = "Date", pch = 19, main = "BTK index and S&P500 index stocks perform comparably\nduring JPMHC week vs later weeks in same year")
+abline(h = 0.05, col = "red")
+BTK_pvals
+```
+```{r}
+plot(c(2010, 2012:2016, 2018), BTK_pvals, ylim = c(0, 1), ylab = "P-value", xlab = "Date", pch = 19, main = "Biotech indices and S&P500 index stocks perform comparably\nduring JPMHC week vs later weeks in same year")
+abline(h = 0.05, col = "red")
+points(2010:2018, pvals, ylim = c(0, 1), ylab = "P-value", xlab = "Date", pch = 19, main = "NBI index and S&P500 index stocks perform comparably\nduring JPMHC week vs later weeks in the year", col = "blue")
+legend("topright", legend = c("NYSE", "NASDAQ"), col = c("black", "blue"), pch = 19)
+
+```
+```{r, echo = FALSE}
+yr <- 2010
+
+for (yr in c(2010, 2012:2016, 2018)){
+  jpm_week_value <- BTK_over_SP500_ratio_JPM_week %>% filter(year == yr) %>% select(BTK_over_SP500_ratio_JPM_week) %>% unlist %>% unname
+  other_week_values <- BTK_ratio_df %>% filter(year == yr) %>% select(BTK_over_SP500_ratio) %>% unname %>% unlist
+  
+  ggplot(BTK_ratio_df %>% filter(year == yr) %>% mutate(year = as.factor(year)), aes(x = year, y = BTK_over_SP500_ratio)) + 
+    geom_dotplot(binaxis = 'y', stackdir = 'center')
+   
+  boxplot(BTK_over_SP500_ratio ~ year, data = BTK_ratio_df %>% filter(year == yr))
+  stripchart(BTK_over_SP500_ratio_JPM_week %>% filter(year == yr), col = "red", pch = 19, add= TRUE)
+}
+
+
+BTK_over_SP500_ratio_no_2017 <- BTK_ratio_df %>% filter(year != 2017) %>% select(-week)
+colnames(BTK_over_SP500_ratio_JPM_week)[1] <- "BTK_over_SP500_ratio"
+
+colnames(biotech_over_SP500_ratio_JPM_week)[1] <- "biotech_over_SP500_ratio"
+
+
+
+```
+
+```{r, echo = FALSE}
+boxplot(BTK_over_SP500_ratio ~ year, data = BTK_over_SP500_ratio_no_2017, main = "NYSE Biotech Index (BTK) and S&P500 index stocks perform\ncomparably during JPMHC week vs other weeks in the year")
+stripchart(BTK_over_SP500_ratio  ~ year, data = BTK_over_SP500_ratio_JPM_week, col = "red", pch = 19, add= TRUE, vertical = TRUE)
+legend("topleft", legend = c("JPMHC week"), col = "red", pch = 19)
+
+
+
+
+boxplot(biotech_over_SP500_ratio ~ year, data = ratio_df, main = "NASDAQ Biotech Index (NBI) and S&P500 index stocks perform\ncomparably during JPMHC week vs other weeks in the year")
+stripchart(biotech_over_SP500_ratio ~ year, biotech_over_SP500_ratio_JPM_week, col = "red", pch = 19, add= TRUE, vertical = TRUE)
+legend("topleft", legend = c("JPMHC week"), col = "red", pch = 19)
+
+
+pdf(file = "/Users/katiephd/Box Sync/Katie_Documents/JPM19_stock_analysis/2019-06-04_NYSE_vs_SP500.pdf")
+boxplot(BTK_over_SP500_ratio ~ year, data = BTK_over_SP500_ratio_no_2017, main = "NYSE Biotech Index (BTK) and S&P500 index stocks perform\ncomparably during JPMHC week vs other weeks in the year")
+stripchart(BTK_over_SP500_ratio  ~ year, data = BTK_over_SP500_ratio_JPM_week, col = "red", pch = 19, add= TRUE, vertical = TRUE)
+legend("topleft", legend = c("JPMHC week"), col = "red", pch = 19)
+dev.off()
+
+
+pdf(file = "/Users/katiephd/Box Sync/Katie_Documents/JPM19_stock_analysis/2019-06-04_NASDAQ_vs_SP500.pdf")
+boxplot(biotech_over_SP500_ratio ~ year, data = ratio_df, main = "NASDAQ Biotech Index (NBI) and S&P500 index stocks perform\ncomparably during JPMHC week vs other weeks in the year")
+stripchart(biotech_over_SP500_ratio ~ year, biotech_over_SP500_ratio_JPM_week, col = "red", pch = 19, add= TRUE, vertical = TRUE)
+legend("topleft", legend = c("JPMHC week"), col = "red", pch = 19)
+dev.off()
+
+```
+
+
+Done! Let's interpret this data in light of my original hypotheses: 
+  
+1. Healthcare stock prices tend to fluctuate more during JPM week than any other week in the same year.   
+      This effect is only seen in the last 10 years. Perhaps the conference is becoming more influential with time?  
+2. The biotech sector outperforms the S&P 500 during JPM week more often than is expected by chance.  
+      This is not reflected in my analyses. I found that using two different biotech index stocks, the ratio of the change in biotech index stock value to S&P500 index from the beginning to the end of JPMHC week is not statistically different from other weeks in the year. This finding is contradictory to my gut intuition and to other analyses.    
+      
+What is might complicate the interpretation of the data:  
+  
+* Beginning of a fiscal quarter? Control by look at other quarters?  
+* Every four years January means a new presidential term? Control by comparing years with and without inaugurations?  
+* The choice to use individual stocks (unweighted) in flucation analysis vs index stocks (with weighting) in performance analysis.  
+* Appropriate definition/calculation of fluctuation and performance.  
+* Not having a completely accurate list of JPMHC dates.  
+
+## Sources: 
+Helpful introductory tutorial to stock data in R by Curtis Miller: https://ntguardian.wordpress.com/2017/03/27/introduction-stock-market-data-r-1/
+
+Example of how GetBatchSymbols works and improves upon quantmod library by Marcelo Perlin: 
+https://cran.r-project.org/web/packages/BatchGetSymbols/vignettes/BatchGetSymbols-vignette.html
+
