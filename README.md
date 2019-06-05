@@ -8,6 +8,6 @@ Given these claims I hypothesized that:
 1. Healthcare stock prices tend to fluctuate more during JPM week than any other week in the same year.
 2. The biotech sector outperforms the S&P 500 during JPM week more often than is expected by chance.
 
-The analysis of these claims is performed in the .Rmd file in this repo. A summary of the conclusions from the analysis can be found at my website[https://katiesaund.com/post/jpmhc/].
+The analysis of these claims is performed in the .Rmd file in this repo. A summary of the conclusions from the analysis can be found at [my website](https://katiesaund.com/post/jpmhc/).
 
 
